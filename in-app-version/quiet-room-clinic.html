@@ -1,0 +1,1033 @@
+<title>Quiet Room Clinic</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Caveat:wght@500;700&family=Fraunces:opsz,wght@9..144,500;9..144,600&family=Inter:wght@400;500;600&display=swap">
+<style>
+/* Layout: full-bleed illustrated consultation room; game UI floats over it (HUD top, dialogue box bottom, paper overlays).
+   Single deliberate look (a warm illustrated room) in every theme, so colors are set explicitly. */
+:root{
+  --paper:#FBF6EA; --paper-line:#E4D9C3; --ink:#2A2620; --soft:#6A6255; --faint:#9A9183;
+  --wood:#5A3E2B; --clay:#B65E4A; --sage:#4C7353; --sage-lt:#DCE7DC; --honey:#B88A26; --honey-lt:#F5E5B8; --dusk:#525D90; --dusk-lt:#DADFEE;
+  --display:"Fraunces",Georgia,serif; --body:"Inter",system-ui,-apple-system,sans-serif; --hand:"Caveat","Segoe Print","Bradley Hand",cursive;
+  color-scheme:light;
+}
+[hidden]{display:none!important}
+html,body{height:100%;overflow:hidden}
+body{background:#2A1A0E;color:var(--ink);font:15px/1.5 var(--body);-webkit-font-smoothing:antialiased}
+button{font:inherit;cursor:pointer;color:inherit}
+h1,h2,h3{font-family:var(--display);font-weight:600;margin:0;text-wrap:balance}
+:focus-visible{outline:3px solid #E8B76A;outline-offset:2px}
+
+#stage{position:fixed;inset:0}
+#sceneHost{position:absolute;inset:0}
+.dim{position:absolute;inset:0;background:rgba(30,18,8,.45);backdrop-filter:blur(2px);transition:opacity .5s}
+
+/* buttons */
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;border:0;border-radius:12px;padding:11px 18px;font-weight:600;background:var(--sage);color:#fff;box-shadow:0 2px 0 rgba(0,0,0,.18);transition:transform .1s,filter .2s}
+.btn:hover{filter:brightness(1.07)} .btn:active{transform:translateY(1px)} .btn:disabled{opacity:.5;cursor:not-allowed}
+.btn.clay{background:var(--clay)} .btn.quiet{background:transparent;color:var(--soft);box-shadow:none;border:1px solid var(--paper-line)}
+.chip{display:inline-flex;align-items:center;gap:8px;background:rgba(251,246,234,.92);border-radius:999px;padding:6px 14px;box-shadow:0 4px 14px rgba(0,0,0,.18);font-size:14px}
+
+/* paper sheets */
+.sheet{position:relative;background:var(--paper);border-radius:6px;box-shadow:0 18px 50px rgba(0,0,0,.35);background-image:repeating-linear-gradient(transparent 0 31px,var(--paper-line) 31px 32px);background-position:0 18px}
+.sheet .hand{font-family:var(--hand);font-size:24px;line-height:32px;color:#28406B}
+.overlay{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;padding:max(16px,env(safe-area-inset-top,0px)) max(16px,env(safe-area-inset-right,0px)) max(16px,env(safe-area-inset-bottom,0px)) max(16px,env(safe-area-inset-left,0px));z-index:20}
+.overlay>.sheet{max-height:100%;overflow-y:auto;animation:drop .45s ease-out both}
+.label{font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.09em;color:var(--faint)}
+
+/* title */
+#title .sheet{width:min(440px,100%);padding:30px 28px;text-align:center;background-image:none}
+#title h1{font-size:34px;line-height:1.1}
+#title input{width:100%;box-sizing:border-box;margin-top:6px;font:inherit;font-size:16px;padding:12px 14px;border:1px solid var(--paper-line);border-radius:10px;background:#fff;color:var(--ink)}
+.stats{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin:16px 0}
+.stats div{background:#F2EADA;border-radius:10px;padding:8px 4px}.stats b{display:block;font-family:var(--display);font-size:22px;font-variant-numeric:tabular-nums}
+.xpbar{height:8px;border-radius:9px;background:#EADFCB;overflow:hidden}.xpbar i{display:block;height:100%;background:var(--honey);border-radius:9px;transition:width .8s}
+
+/* intake clipboard */
+.clipboard{width:min(460px,100%);padding:46px 28px 26px;background-color:var(--paper)}
+.clipboard::before{content:"";position:absolute;top:-14px;left:50%;transform:translateX(-50%);width:120px;height:34px;border-radius:8px;background:linear-gradient(#C7CBD1,#8E949C);box-shadow:0 3px 6px rgba(0,0,0,.25)}
+.field{display:flex;gap:10px;align-items:baseline;border-bottom:1px solid transparent}
+.field .k{flex:none;width:96px;font-size:12px;font-weight:600;text-transform:uppercase;letter-spacing:.06em;color:var(--faint)}
+
+/* HUD */
+.hud{position:absolute;top:0;left:0;right:0;display:flex;justify-content:space-between;align-items:flex-start;gap:10px;padding:calc(12px + env(safe-area-inset-top,0px)) max(16px,env(safe-area-inset-right,0px)) 0 max(16px,env(safe-area-inset-left,0px));z-index:10;pointer-events:none}
+.hud>*{pointer-events:auto}
+.who{display:flex;flex-direction:column;gap:6px;background:rgba(251,246,234,.92);border-radius:14px;padding:10px 14px;box-shadow:0 4px 14px rgba(0,0,0,.18);min-width:170px}
+.who b{font-family:var(--display);font-size:17px}
+.comfort{display:flex;align-items:center;gap:8px;font-size:12px;color:var(--soft)}
+.comfort .m{flex:1;height:7px;border-radius:9px;background:#EADFCB;overflow:hidden}
+.comfort .m i{display:block;height:100%;border-radius:9px;background:linear-gradient(90deg,#C9714A,#D9A63A,#5F8A66);background-size:300% 100%;transition:width .8s,background-position .8s}
+.timer{font-family:ui-monospace,"SF Mono",Menlo,monospace;font-variant-numeric:tabular-nums;font-weight:600}
+.timer.low{background:#F8E0D4;color:#9A3E25}
+
+/* dialogue box */
+.dialog{position:absolute;left:50%;transform:translateX(-50%);bottom:calc(14px + env(safe-area-inset-bottom,0px));width:min(760px,calc(100% - 32px));z-index:10}
+.dbox{position:relative;background:rgba(251,246,234,.97);border-radius:16px;box-shadow:0 14px 40px rgba(0,0,0,.35);border:2px solid #E2D2B4;padding:24px 22px 16px}
+.nameplate{position:absolute;top:-16px;left:18px;background:var(--clay);color:#fff;font-family:var(--display);font-weight:600;padding:4px 14px;border-radius:9px;font-size:15px;box-shadow:0 3px 8px rgba(0,0,0,.2)}
+.nameplate.you{background:var(--sage)}
+.line{font-size:18px;line-height:1.55;min-height:56px;max-height:30vh;overflow-y:auto;cursor:pointer}
+.line .caret{display:inline-block;width:8px;margin-left:2px;animation:blink 1s steps(2) infinite;color:var(--faint)}
+.reply{display:flex;gap:8px;margin-top:12px;align-items:flex-end}
+.reply textarea{flex:1;font:inherit;font-size:15px;resize:none;border:1px solid var(--paper-line);border-radius:12px;padding:10px 12px;background:#fff;color:var(--ink);max-height:110px;min-height:44px;box-sizing:border-box}
+.dtools{display:flex;justify-content:space-between;align-items:center;margin-top:8px;font-size:12px;color:var(--faint)}
+.linkbtn{background:none;border:0;color:var(--soft);font-size:12px;padding:2px 4px;text-decoration:underline;text-underline-offset:2px}
+
+/* notebook object */
+.notebook{position:absolute;z-index:11;left:max(18px,env(safe-area-inset-left,0px));bottom:calc(22px + env(safe-area-inset-bottom,0px));width:104px;height:132px;border:0;border-radius:6px 12px 12px 6px;background:linear-gradient(90deg,#3D2A1C 0 10px,#7A4A2E 10px);box-shadow:0 10px 24px rgba(0,0,0,.4),inset -6px 0 0 rgba(0,0,0,.12);color:#F4E6CC;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;transition:transform .2s}
+.notebook::after{content:"";position:absolute;right:16px;top:0;bottom:0;width:6px;background:#2B1D12;opacity:.7}
+.notebook:hover{transform:translateY(-4px) rotate(-2deg)}
+.notebook .t{font-family:var(--hand);font-size:22px;line-height:1;text-align:center;padding:0 14px 0 16px}
+.notebook .n{font-size:12px;opacity:.85;font-variant-numeric:tabular-nums}
+.notebook .badge{position:absolute;top:-8px;right:-8px;background:var(--honey);color:#fff;border-radius:99px;font-size:12px;font-weight:700;padding:2px 8px;box-shadow:0 2px 6px rgba(0,0,0,.3)}
+.notebook.bump{animation:bump .6s ease}
+.flyer{position:fixed;z-index:30;background:#FFF7D6;border-radius:4px;padding:8px 12px;font-family:var(--hand);font-size:20px;color:#28406B;box-shadow:0 6px 16px rgba(0,0,0,.3);white-space:nowrap;pointer-events:none}
+
+/* notebook overlay */
+.book{width:min(860px,100%);padding:30px 28px 24px 54px;background-color:var(--paper)}
+.book::before{content:"";position:absolute;left:36px;top:0;bottom:0;width:2px;background:#E7A9A0}
+.bookgrid{display:grid;grid-template-columns:1fr 1fr;gap:6px 28px}
+.cat{break-inside:avoid;margin-bottom:12px}
+.cat h3{font-family:var(--body);font-size:12px;font-weight:600;text-transform:uppercase;letter-spacing:.08em;color:var(--soft);display:flex;justify-content:space-between;line-height:32px}
+.ins{font-family:var(--hand);font-size:22px;line-height:28px;color:#28406B;padding:2px 0}
+.ins small{font-family:var(--body);font-size:10px;font-weight:700;letter-spacing:.07em;text-transform:uppercase;padding:1px 6px;border-radius:99px;margin-left:6px;vertical-align:middle}
+.ins.important small{background:var(--honey-lt);color:#8A6516}.ins.connected small{background:var(--dusk-lt);color:var(--dusk)}.ins.discovered small{background:var(--sage-lt);color:var(--sage)}
+.ins .lk{display:block;font-size:17px;color:var(--dusk);line-height:20px}
+.ins.fresh{animation:inkin .9s ease both}
+.unknown{font-family:var(--hand);font-size:21px;line-height:30px;color:#B8AE9C}
+.notes{width:100%;box-sizing:border-box;font-family:var(--hand);font-size:22px;line-height:32px;color:#28406B;background:transparent;border:0;resize:vertical;min-height:96px;padding:0}
+
+/* log */
+.log{width:min(640px,100%);padding:26px 26px 20px;background-image:none}
+.log .entry{padding:8px 0;border-bottom:1px dashed var(--paper-line)}
+.log .entry b{font-size:12px;text-transform:uppercase;letter-spacing:.06em}
+
+/* assessment + report */
+.form{width:min(680px,100%);padding:30px 28px 22px 54px;background-color:var(--paper)}
+.form::before{content:"";position:absolute;left:36px;top:0;bottom:0;width:2px;background:#E7A9A0}
+.form label{display:block;margin-bottom:10px}
+.form label span{font-size:12px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:var(--soft);line-height:32px}
+.form textarea{width:100%;box-sizing:border-box;font-family:var(--hand);font-size:22px;line-height:32px;color:#28406B;background:transparent;border:0;border-bottom:1px solid transparent;resize:vertical;padding:0;min-height:64px}
+.report{width:min(820px,100%);padding:30px 28px 24px;background-image:none}
+.rings{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;text-align:center;margin:18px 0}
+.ring{position:relative;width:min(118px,24vw);aspect-ratio:1;margin:0 auto;max-width:100%}
+.ring svg{width:100%;height:100%;transform:rotate(-90deg)}
+.ring span{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-family:var(--display);font-size:clamp(22px,6vw,32px);font-weight:600;font-variant-numeric:tabular-nums}
+.cols{display:grid;grid-template-columns:1fr 1fr;gap:18px}
+.kv{display:flex;justify-content:space-between;font-size:14px;font-variant-numeric:tabular-nums;padding:2px 0}
+.bar{height:7px;border-radius:9px;background:#EADFCB;overflow:hidden;margin:3px 0 8px}.bar i{display:block;height:100%;background:var(--sage);border-radius:9px}
+.stamp{position:absolute;top:22px;right:24px;transform:rotate(8deg);border:3px solid var(--clay);color:var(--clay);font-family:var(--display);font-weight:600;padding:4px 12px;border-radius:8px;font-size:14px;opacity:.85}
+.err{background:#F8E0D4;color:#9A3E25;border-radius:10px;padding:9px 12px;font-size:14px;margin-top:10px}
+.toast{position:absolute;left:50%;top:calc(80px + env(safe-area-inset-top,0px));transform:translateX(-50%);z-index:25;background:var(--paper);border-radius:999px;padding:8px 16px;font-size:14px;box-shadow:0 8px 20px rgba(0,0,0,.3);animation:toast 3s ease both;white-space:nowrap;max-width:90vw;overflow:hidden;text-overflow:ellipsis}
+
+@keyframes drop{from{opacity:0;transform:translateY(-18px) rotate(-1deg)}to{opacity:1;transform:none}}
+@keyframes blink{50%{opacity:0}}
+@keyframes bump{30%{transform:translateY(-8px) rotate(-4deg)}60%{transform:translateY(0) rotate(2deg)}}
+@keyframes inkin{from{opacity:0;filter:blur(2px)}to{opacity:1;filter:none}}
+@keyframes toast{0%{opacity:0;transform:translate(-50%,-8px)}12%,85%{opacity:1;transform:translate(-50%,0)}100%{opacity:0}}
+@media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
+@media (max-width:820px){
+  .notebook{width:64px;height:82px;left:max(16px,env(safe-area-inset-left,0px));bottom:auto;top:calc(106px + env(safe-area-inset-top,0px))}
+  .stamp{position:static;display:inline-block;margin-bottom:8px;transform:rotate(-3deg)}
+  .notebook .t{font-size:16px}.notebook .n{font-size:10px}
+  .bookgrid,.cols{grid-template-columns:1fr}
+  .book,.form{padding-left:44px}.book::before,.form::before{left:28px}
+  .line{font-size:16px}
+  .who{min-width:0}
+}
+</style>
+
+<div id="stage">
+  <div id="sceneHost"></div>
+
+  <!-- in-session HUD -->
+  <div class="hud" id="hud" hidden>
+    <div class="who">
+      <b id="hudName"></b>
+      <div class="comfort" title="How comfortable the patient feels with you"><span>Comfort</span><span class="m"><i id="comfortBar"></i></span></div>
+    </div>
+    <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;justify-content:flex-end">
+      <span class="chip timer" id="timer">10:00</span>
+      <button class="chip" id="endBtn" style="border:0">End session</button>
+    </div>
+  </div>
+
+  <button class="notebook" id="notebookBtn" hidden aria-label="Open case notebook">
+    <span class="t">Case notes</span><span class="n" id="nbCount">0 / 0</span><span class="badge" id="nbBadge" hidden></span>
+  </button>
+
+  <div class="dialog" id="dialog" hidden>
+    <div class="dbox">
+      <div class="nameplate" id="plate">…</div>
+      <div class="line" id="line" aria-live="polite"></div>
+      <form class="reply" id="replyForm" hidden>
+        <label for="say" class="label" style="position:absolute;left:-9999px">Your response</label>
+        <textarea id="say" rows="1" maxlength="600" placeholder="What do you say?"></textarea>
+        <button class="btn" id="sayBtn">Say</button>
+      </form>
+      <div class="dtools"><span id="hint">Tap the text to skip</span><button class="linkbtn" id="logBtn" type="button">Session log</button></div>
+      <div id="dErr"></div>
+    </div>
+  </div>
+
+  <div class="dim" id="dim"></div>
+  <div class="overlay" id="title"><div class="sheet">
+    <div class="label">The Quiet Room Clinic</div>
+    <h1 style="margin:8px 0 10px">Therapist Simulator</h1>
+    <p style="color:var(--soft);margin:0 0 18px">Patients walk in with a story they haven't told yet. Listen closely. You have ten minutes.</p>
+    <div id="newPlayer"><label for="pname" style="font-weight:600;font-size:14px">What should patients call you?</label><input id="pname" maxlength="40" placeholder="Dr. Kadam"></div>
+    <div id="backPlayer" hidden>
+      <div style="font-family:var(--display);font-size:22px;font-weight:600" id="tName"></div>
+      <div class="stats"><div><b id="tLvl">1</b><span class="label">Level</span></div><div><b id="tN">0</b><span class="label">Sessions</span></div><div><b id="tBest">–</b><span class="label">Best</span></div></div>
+      <div style="display:flex;justify-content:space-between;font-size:12px;color:var(--soft);margin-bottom:5px"><span id="tTier"></span><span id="tXp"></span></div>
+      <div class="xpbar"><i id="tXpBar"></i></div>
+    </div>
+    <div id="titleErr"></div>
+    <button class="btn" id="playBtn" style="width:100%;margin-top:18px;padding:14px">Open the clinic</button>
+    <p style="font-size:12px;color:var(--faint);margin:12px 0 0">Patients are fictional. Their words are written by Claude on your account, so the first patient asks your permission.</p>
+  </div></div>
+</div>
+
+<script>
+/* Quiet Room Clinic — illustrated consultation room + procedural patient character.
+ * Plain JS, no dependencies. Used by the React app and inlined into the in-app artifact.
+ *
+ *   const scene = createScene(hostElement)
+ *   scene.setPatient(look | null)        // null = empty chair
+ *   scene.setEmotion("neutral" | "warm" | "sad" | "anxious" | "guarded" | "tearful" | "relieved" | "frustrated" | "thinking")
+ *   scene.setTalking(bool)               // mouth animation
+ *   scene.setThinking(bool)              // "…" bubble
+ *   scene.setTime(progress0to1, secondsLeft)
+ *   scene.enter() / scene.leave()        // patient arrival / exit animation (return Promises)
+ */
+
+const EMOTIONS = ["neutral", "warm", "sad", "anxious", "guarded", "tearful", "relieved", "frustrated", "thinking"];
+
+const SKIN = ["#F6D7C3", "#EDC3A0", "#D9A37C", "#B97E57", "#8E5B3D", "#5E3B26"];
+const HAIR = { black: "#1F1A17", dark: "#3B2A20", brown: "#6B4A2F", auburn: "#8A4B2A", blonde: "#C9A15E", gray: "#A3A19B" };
+const OUTFITS = ["#4F6D8F", "#8C5A6E", "#5D7F5F", "#B5793F", "#6A5E8C", "#3F6E73", "#9A4F45", "#56606B"];
+const HAIRSTYLES = ["short", "long", "bun", "curly", "buzz", "wavy"];
+
+function hash(s) { let h = 2166136261; for (const c of String(s)) { h ^= c.charCodeAt(0); h = Math.imul(h, 16777619); } return h >>> 0; }
+
+/** Normalise an LLM- or template-provided look, filling gaps deterministically from the name. */
+function normalizeLook(look, name = "", age = 35) {
+  const h = hash(name);
+  const l = look || {};
+  const gender = ["woman", "man", "nonbinary"].includes(l.gender) ? l.gender : (h % 2 ? "woman" : "man");
+  let hair = HAIRSTYLES.includes(l.hair) ? l.hair : (gender === "woman" ? ["long", "bun", "wavy", "curly"][h % 4] : ["short", "buzz", "curly", "wavy"][h % 4]);
+  let hairColor = HAIR[l.hair_color] ? l.hair_color : ["black", "dark", "brown", "auburn", "blonde", "dark"][(h >>> 3) % 6];
+  if (age >= 60 && !l.hair_color) hairColor = "gray";
+  const skin = Number.isInteger(l.skin) && l.skin >= 1 && l.skin <= 6 ? l.skin : 1 + ((h >>> 5) % 6);
+  const outfit = /^#[0-9a-f]{6}$/i.test(l.outfit || "") ? l.outfit : OUTFITS[(h >>> 7) % OUTFITS.length];
+  return {
+    gender, hair, hairColor, skin, outfit,
+    glasses: typeof l.glasses === "boolean" ? l.glasses : ((h >>> 9) % 4 === 0),
+    beard: gender === "man" && (typeof l.beard === "boolean" ? l.beard : ((h >>> 11) % 3 === 0)),
+    age,
+  };
+}
+
+const ROOM = `
+<svg class="qr-scene" viewBox="0 0 1600 900" preserveAspectRatio="xMidYMid slice" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Consultation room">
+  <defs>
+    <linearGradient id="qrSky" x1="0" y1="0" x2="0" y2="1">
+      <stop id="qrSkyTop" offset="0" stop-color="#BFD9E8"/><stop id="qrSkyBot" offset="1" stop-color="#F3E3C3"/>
+    </linearGradient>
+    <linearGradient id="qrWall" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#E9DCC7"/><stop offset="1" stop-color="#DDCDB4"/></linearGradient>
+    <linearGradient id="qrFloor" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#9C7652"/><stop offset="1" stop-color="#7C5A3D"/></linearGradient>
+    <linearGradient id="qrDesk" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#6E4A30"/><stop offset="1" stop-color="#4E331F"/></linearGradient>
+    <radialGradient id="qrGlow" cx=".5" cy=".5" r=".5"><stop offset="0" stop-color="#FFE3A8" stop-opacity=".75"/><stop offset="1" stop-color="#FFE3A8" stop-opacity="0"/></radialGradient>
+    <radialGradient id="qrVignette" cx=".5" cy=".45" r=".75"><stop offset=".6" stop-color="#000" stop-opacity="0"/><stop offset="1" stop-color="#2A1A0E" stop-opacity=".35"/></radialGradient>
+    <clipPath id="qrWin"><rect x="170" y="150" width="300" height="320" rx="6"/></clipPath>
+  </defs>
+
+  <!-- wall + floor -->
+  <rect width="1600" height="640" fill="url(#qrWall)"/>
+  <rect y="560" width="1600" height="80" fill="#CDBB9E"/>
+  <rect y="556" width="1600" height="8" fill="#BFAA8A"/>
+  <rect y="640" width="1600" height="260" fill="url(#qrFloor)"/>
+  <g stroke="#6F5034" stroke-width="2" opacity=".35">
+    <line x1="0" y1="690" x2="1600" y2="690"/><line x1="0" y1="750" x2="1600" y2="750"/><line x1="0" y1="820" x2="1600" y2="820"/>
+  </g>
+
+  <!-- window -->
+  <g>
+    <rect x="160" y="140" width="320" height="340" rx="10" fill="#F4ECDD"/>
+    <g clip-path="url(#qrWin)">
+      <rect x="170" y="150" width="300" height="320" fill="url(#qrSky)"/>
+      <circle id="qrSun" cx="400" cy="230" r="34" fill="#FFF3D1" opacity=".9"/>
+      <path d="M170 420 Q230 360 290 400 Q350 350 410 395 Q440 375 470 390 L470 470 L170 470Z" fill="#7E9C7C" opacity=".85"/>
+      <path d="M170 445 Q250 410 330 440 Q400 420 470 440 L470 470 L170 470Z" fill="#5F7F5E"/>
+      <rect id="qrDusk" x="170" y="150" width="300" height="320" fill="#1D2240" opacity="0"/>
+    </g>
+    <rect x="314" y="150" width="12" height="320" fill="#F4ECDD"/><rect x="170" y="300" width="300" height="12" fill="#F4ECDD"/>
+    <rect x="150" y="474" width="340" height="16" rx="4" fill="#EADFCB"/>
+    <path d="M130 120 Q150 300 128 500 L178 500 Q196 300 186 120Z" fill="#B65E4A"/>
+    <path d="M510 120 Q490 300 512 500 L462 500 Q444 300 454 120Z" fill="#B65E4A"/>
+    <rect x="110" y="108" width="420" height="14" rx="7" fill="#5A3E2B"/>
+    <path d="M220 474 q-10 -40 10 -60 q8 18 0 60z M245 474 q4 -50 26 -62 q-2 30 -14 62z" fill="#6E8F5B"/>
+    <rect x="212" y="466" width="56" height="12" rx="3" fill="#C27C55"/>
+  </g>
+
+  <!-- framed certificate + art -->
+  <g>
+    <rect x="590" y="180" width="130" height="96" rx="4" fill="#5A3E2B"/><rect x="600" y="190" width="110" height="76" fill="#FBF6EA"/>
+    <rect x="618" y="204" width="74" height="6" rx="3" fill="#C9B79A"/><rect x="626" y="218" width="58" height="4" rx="2" fill="#DCCDB4"/>
+    <rect x="626" y="228" width="58" height="4" rx="2" fill="#DCCDB4"/><circle cx="655" cy="250" r="8" fill="#C9714A" opacity=".7"/>
+  </g>
+  <g>
+    <rect x="1240" y="150" width="190" height="140" rx="4" fill="#E2D3BA" stroke="#5A3E2B" stroke-width="8"/>
+    <path d="M1250 270 Q1300 200 1340 240 Q1380 190 1420 250 L1420 280 L1250 280Z" fill="#8FAE9A"/>
+    <circle cx="1390" cy="190" r="16" fill="#E8B76A"/>
+  </g>
+
+  <!-- wall clock (timer) -->
+  <g transform="translate(1050 190)">
+    <circle r="62" fill="#5A3E2B"/><circle r="54" fill="#FBF6EA"/>
+    <g stroke="#5A3E2B" stroke-width="3" stroke-linecap="round">
+      <line y1="-46" y2="-38"/><line y1="46" y2="38"/><line x1="-46" x2="-38"/><line x1="46" x2="38"/>
+    </g>
+    <path id="qrClockArc" d="" fill="#C9714A" opacity=".25"/>
+    <line id="qrClockMin" y2="-38" stroke="#2A2B27" stroke-width="4" stroke-linecap="round"/>
+    <line id="qrClockSec" y2="-44" stroke="#C9714A" stroke-width="2" stroke-linecap="round"/>
+    <circle r="5" fill="#2A2B27"/>
+  </g>
+
+  <!-- bookshelf -->
+  <g transform="translate(1250 330)">
+    <rect width="210" height="330" rx="6" fill="#6B4A32"/>
+    <rect x="12" y="12" width="186" height="96" fill="#4E3524"/><rect x="12" y="120" width="186" height="96" fill="#4E3524"/><rect x="12" y="228" width="186" height="90" fill="#4E3524"/>
+    <g>
+      <rect x="20" y="40" width="18" height="68" fill="#9A4F45"/><rect x="40" y="30" width="14" height="78" fill="#D9A63A"/><rect x="56" y="46" width="20" height="62" fill="#4F6D8F"/>
+      <rect x="78" y="36" width="12" height="72" fill="#5D7F5F"/><rect x="104" y="52" width="70" height="14" fill="#C9B79A" transform="rotate(-8 104 52)"/>
+      <rect x="22" y="150" width="16" height="66" fill="#3F6E73"/><rect x="40" y="140" width="22" height="76" fill="#B5793F"/><rect x="64" y="156" width="14" height="60" fill="#8C5A6E"/>
+      <circle cx="150" cy="196" r="20" fill="#7E9C7C"/><rect x="138" y="196" width="24" height="20" fill="#C27C55"/>
+      <rect x="22" y="262" width="60" height="56" rx="4" fill="#D8C7A8"/><rect x="100" y="250" width="16" height="68" fill="#6A5E8C"/><rect x="118" y="258" width="18" height="60" fill="#9A4F45"/>
+    </g>
+  </g>
+
+  <!-- floor lamp -->
+  <g>
+    <circle id="qrLampGlow" cx="1520" cy="330" r="190" fill="url(#qrGlow)" opacity=".35"/>
+    <rect x="1514" y="360" width="8" height="300" fill="#3A2A1E"/><ellipse cx="1518" cy="662" rx="40" ry="8" fill="#3A2A1E"/>
+    <path d="M1470 360 L1566 360 L1546 290 L1490 290Z" fill="#F2DDB0"/>
+  </g>
+
+  <!-- plant -->
+  <g transform="translate(520 520)">
+    <path d="M40 40 Q0 -40 -30 -60 Q10 -40 30 0Z M40 40 Q60 -60 100 -90 Q70 -30 54 30Z M40 40 Q20 -20 -10 -110 Q40 -50 50 20Z M40 40 Q90 -10 120 -30 Q90 10 56 44Z" fill="#5F8A5E"/>
+    <path d="M10 40 L70 40 L62 120 L18 120Z" fill="#C27C55"/><rect x="4" y="34" width="72" height="12" rx="4" fill="#A9653F"/>
+  </g>
+
+  <!-- rug -->
+  <ellipse cx="800" cy="790" rx="460" ry="80" fill="#B7765A" opacity=".85"/>
+  <ellipse cx="800" cy="790" rx="410" ry="62" fill="none" stroke="#E7C9A6" stroke-width="4" stroke-dasharray="14 10" opacity=".7"/>
+
+  <!-- side table with tissues -->
+  <g transform="translate(1040 560)">
+    <rect x="-6" y="70" width="10" height="100" fill="#4E3524"/><rect x="86" y="70" width="10" height="100" fill="#4E3524"/>
+    <rect x="-20" y="56" width="130" height="18" rx="5" fill="#6B4A32"/>
+    <rect x="10" y="22" width="64" height="36" rx="5" fill="#9DB89F"/><path d="M34 22 q8 -18 16 0" fill="#FFFFFF"/>
+  </g>
+
+  <!-- armchair + patient -->
+  <g id="qrChairBack">
+    <path d="M650 360 Q650 300 720 296 L880 296 Q950 300 950 360 L956 640 L644 640Z" fill="#4F7A78"/>
+    <path d="M672 372 Q672 326 726 322 L874 322 Q928 326 928 372 L932 560 L668 560Z" fill="#5C8A87"/>
+  </g>
+  <g id="qrPatient" style="opacity:0"></g>
+  <g id="qrChairFront">
+    <rect x="610" y="520" width="80" height="150" rx="36" fill="#446C6A"/>
+    <rect x="910" y="520" width="80" height="150" rx="36" fill="#446C6A"/>
+    <rect x="636" y="660" width="14" height="40" fill="#3A2A1E"/><rect x="950" y="660" width="14" height="40" fill="#3A2A1E"/>
+  </g>
+  <g id="qrBubble" style="opacity:0;transition:opacity .3s" transform="translate(-62 -6)">
+    <path d="M880 250 q0 -40 50 -40 h70 q50 0 50 40 q0 40 -50 40 h-50 l-24 22 l4 -22 q-50 0 -50 -40z" fill="#FFFDF8" stroke="#D8CDB9" stroke-width="2"/>
+    <circle class="qr-dot" cx="935" cy="250" r="7" fill="#8D8B80"/><circle class="qr-dot" cx="965" cy="250" r="7" fill="#8D8B80"/><circle class="qr-dot" cx="995" cy="250" r="7" fill="#8D8B80"/>
+  </g>
+
+  <!-- coffee table -->
+  <g>
+    <ellipse cx="800" cy="748" rx="250" ry="34" fill="#3A2A1E" opacity=".25"/>
+    <rect x="600" y="726" width="14" height="70" fill="#4E3524"/><rect x="986" y="726" width="14" height="70" fill="#4E3524"/>
+    <path d="M560 712 Q560 700 576 700 L1024 700 Q1040 700 1040 712 L1040 728 L560 728Z" fill="#7A563A"/>
+    <rect x="640" y="672" width="40" height="30" rx="4" fill="#CFE3E8" opacity=".85"/><rect x="644" y="684" width="32" height="16" fill="#9CC6D2" opacity=".7"/>
+    <rect x="880" y="684" width="90" height="16" rx="2" fill="#B65E4A"/><rect x="888" y="672" width="78" height="14" rx="2" fill="#4F6D8F"/>
+  </g>
+
+  <!-- the therapist's desk edge (player's side) -->
+  <rect y="846" width="1600" height="60" fill="url(#qrDesk)"/>
+  <rect y="840" width="1600" height="8" fill="#8A6040"/>
+  <g transform="translate(1340 800)">
+    <path d="M0 40 L6 0 L66 0 L72 40 Q36 52 0 40Z" fill="#F4ECDD"/><path d="M66 10 q22 0 22 14 q0 14 -20 14" fill="none" stroke="#F4ECDD" stroke-width="7"/>
+    <ellipse cx="36" cy="3" rx="30" ry="5" fill="#8A5A36"/>
+    <path class="qr-steam" d="M24 -8 q-8 -14 2 -26 q8 -12 -2 -26" fill="none" stroke="#FFFFFF" stroke-width="3" opacity=".55" stroke-linecap="round"/>
+    <path class="qr-steam s2" d="M46 -8 q-8 -14 2 -26 q8 -12 -2 -26" fill="none" stroke="#FFFFFF" stroke-width="3" opacity=".45" stroke-linecap="round"/>
+  </g>
+  <rect width="1600" height="900" fill="url(#qrVignette)" pointer-events="none"/>
+</svg>`;
+
+const SCENE_CSS = `
+.qr-host{position:absolute;inset:0;overflow:hidden;background:#2A1A0E}
+.qr-scene{width:100%;height:100%;display:block}
+#qrPatient{transition:opacity .9s ease, transform .9s ease}
+.qr-breathe{animation:qrBreathe 4.2s ease-in-out infinite;transform-origin:800px 600px;transform-box:view-box}
+.qr-blink{animation:qrBlink 5.2s infinite;transform-box:fill-box;transform-origin:center}
+.qr-head{transition:transform .6s ease;transform-box:view-box;transform-origin:800px 410px}
+.qr-dot{animation:qrDot 1.2s infinite}
+.qr-dot:nth-of-type(2){animation-delay:.2s}.qr-dot:nth-of-type(3){animation-delay:.4s}
+.qr-steam{animation:qrSteam 3.4s ease-in-out infinite}.qr-steam.s2{animation-delay:1.2s}
+.qr-tear{animation:qrTear 2.6s ease-in infinite}
+@keyframes qrBreathe{0%,100%{transform:scaleY(1)}50%{transform:scaleY(1.012)}}
+@keyframes qrBlink{0%,94%,100%{transform:scaleY(1)}96%{transform:scaleY(.1)}}
+@keyframes qrDot{0%,100%{opacity:.3}50%{opacity:1}}
+@keyframes qrSteam{0%{opacity:0;transform:translateY(4px)}40%{opacity:.6}100%{opacity:0;transform:translateY(-12px)}}
+@keyframes qrTear{0%{transform:translateY(0);opacity:0}20%{opacity:.9}100%{transform:translateY(26px);opacity:0}}
+@media (prefers-reduced-motion:reduce){.qr-breathe,.qr-blink,.qr-dot,.qr-steam,.qr-tear{animation:none}}
+`;
+
+// ---------- character drawing ----------
+function hairBack(lk, c) {
+  if (lk.hair === "long") return `<path d="M744 320 Q726 420 738 470 L862 470 Q874 420 856 320Z" fill="${c}"/>`;
+  if (lk.hair === "wavy" && lk.gender !== "man") return `<path d="M746 330 Q732 400 744 440 L856 440 Q868 400 854 330Z" fill="${c}"/>`;
+  return "";
+}
+function hairFront(lk, c) {
+  switch (lk.hair) {
+    case "buzz": return `<path d="M752 352 Q748 296 800 292 Q852 296 848 352 Q840 318 800 314 Q760 318 752 352Z" fill="${c}" opacity=".85"/>`;
+    case "short": return `<path d="M750 358 Q742 290 800 286 Q862 288 852 356 Q846 326 830 318 Q800 330 768 318 Q754 330 750 358Z" fill="${c}"/>`;
+    case "bun": return `<circle cx="800" cy="284" r="24" fill="${c}"/><path d="M750 362 Q742 296 800 292 Q858 296 850 362 Q842 322 800 318 Q758 322 750 362Z" fill="${c}"/>`;
+    case "curly": {
+      let s = "";
+      for (const [x, y, r] of [[760, 318, 20], [782, 300, 22], [808, 296, 22], [834, 304, 21], [850, 326, 18], [752, 342, 15], [852, 348, 14], [796, 314, 16], [822, 318, 15]]) s += `<circle cx="${x}" cy="${y}" r="${r}" fill="${c}"/>`;
+      return s;
+    }
+    case "wavy": return `<path d="M748 370 Q736 292 800 288 Q866 292 852 368 Q846 330 822 320 Q790 340 760 326 Q752 340 748 370Z" fill="${c}"/>`;
+    case "long":
+    default: return `<path d="M748 380 Q738 290 800 286 Q862 290 852 380 Q850 332 826 318 Q800 334 774 318 Q750 332 748 380Z" fill="${c}"/>`;
+  }
+}
+
+function arms(posture, o, skin) {
+  const st = `fill="none" stroke="${o}" stroke-width="30" stroke-linecap="round" stroke-linejoin="round"`;
+  if (posture === "crossed") {
+    return `<path d="M730 440 Q716 490 748 506 L842 498" ${st}/><path d="M870 440 Q884 490 852 512 L760 512" ${st}/>
+      <circle cx="846" cy="497" r="13" fill="${skin}"/><circle cx="756" cy="512" r="13" fill="${skin}"/>`;
+  }
+  if (posture === "clasped") {
+    return `<path d="M730 440 Q706 520 790 568" ${st}/><path d="M870 440 Q894 520 810 568" ${st}/>
+      <ellipse cx="800" cy="570" rx="22" ry="15" fill="${skin}"/>`;
+  }
+  if (posture === "face") { // hand near face — tearful/sad
+    return `<path d="M730 440 Q712 520 772 570" ${st}/><path d="M870 440 Q900 470 874 432 L848 404" ${st}/>
+      <circle cx="776" cy="572" r="14" fill="${skin}"/><circle cx="842" cy="398" r="14" fill="${skin}"/>`;
+  }
+  return `<path d="M730 440 Q708 520 762 574" ${st}/><path d="M870 440 Q892 520 838 574" ${st}/>
+    <circle cx="764" cy="577" r="14" fill="${skin}"/><circle cx="836" cy="577" r="14" fill="${skin}"/>`;
+}
+
+const FACE = {
+  neutral:   { brows: ["M772 336 Q782 332 792 335", "M808 335 Q818 332 828 336"], mouth: "M788 392 Q800 396 812 392", gaze: [0, 0], tilt: 0, posture: "lap" },
+  warm:      { brows: ["M772 334 Q782 328 792 333", "M808 333 Q818 328 828 334"], mouth: "M784 389 Q800 403 816 389", gaze: [0, 0], tilt: -2, posture: "lap" },
+  relieved:  { brows: ["M772 336 Q782 330 792 334", "M808 334 Q818 330 828 336"], mouth: "M786 390 Q800 400 814 390", gaze: [0, 1], tilt: 3, posture: "lap", closed: true },
+  sad:       { brows: ["M772 338 Q784 336 792 330", "M808 330 Q816 336 828 338"], mouth: "M788 397 Q800 390 812 397", gaze: [0, 4], tilt: 6, posture: "clasped" },
+  tearful:   { brows: ["M772 339 Q784 336 792 329", "M808 329 Q816 336 828 339"], mouth: "M789 398 Q800 389 811 398", gaze: [0, 4], tilt: 7, posture: "face", tear: true },
+  anxious:   { brows: ["M772 333 Q782 328 792 331", "M808 331 Q818 328 828 333"], mouth: "M789 393 Q795 390 800 393 Q805 396 811 393", gaze: [-3, 0], tilt: -1, posture: "clasped" },
+  guarded:   { brows: ["M772 339 Q782 337 792 340", "M808 340 Q818 337 828 339"], mouth: "M790 394 L810 394", gaze: [5, 1], tilt: -4, posture: "crossed" },
+  frustrated:{ brows: ["M772 334 Q784 338 792 342", "M808 342 Q816 338 828 334"], mouth: "M789 396 Q800 391 811 396", gaze: [0, 0], tilt: 0, posture: "crossed" },
+  thinking:  { brows: ["M772 334 Q782 330 792 334", "M808 331 Q818 326 828 331"], mouth: "M791 393 Q800 394 809 392", gaze: [4, -4], tilt: -3, posture: "lap" },
+};
+
+function characterSVG(lk, emotion) {
+  const f = FACE[emotion] || FACE.neutral;
+  const skin = SKIN[lk.skin - 1];
+  const hc = HAIR[lk.hairColor] || HAIR.dark;
+  const o = lk.outfit;
+  const pants = "#3A3A40";
+  const [gx, gy] = f.gaze;
+  const eye = (x) => f.closed
+    ? `<path d="M${x - 6} 360 Q${x} 364 ${x + 6} 360" stroke="#2A2220" stroke-width="3" fill="none" stroke-linecap="round"/>`
+    : `<ellipse class="qr-blink" cx="${x + gx}" cy="${358 + gy}" rx="5" ry="6.5" fill="#2A2220"/>`;
+  return `
+  <g class="qr-breathe">
+    <rect x="712" y="600" width="44" height="160" rx="18" fill="${pants}"/><rect x="844" y="600" width="44" height="160" rx="18" fill="${pants}"/>
+    <ellipse cx="732" cy="764" rx="30" ry="12" fill="#2B2420"/><ellipse cx="868" cy="764" rx="30" ry="12" fill="#2B2420"/>
+    <rect x="708" y="560" width="184" height="60" rx="26" fill="${pants}"/>
+    <g class="qr-head" style="transform:rotate(${f.tilt}deg)">${hairBack(lk, hc)}</g>
+    <path d="M722 448 Q720 420 752 414 L848 414 Q880 420 878 448 L886 590 L714 590Z" fill="${o}"/>
+    <path d="M776 414 L800 444 L824 414Z" fill="${skin}"/>
+    <path d="M770 414 L800 450 L830 414" fill="none" stroke="#000" stroke-opacity=".15" stroke-width="3"/>
+    ${arms(f.posture, o, skin)}
+    <g class="qr-head" style="transform:rotate(${f.tilt}deg) translateY(${f.tilt > 4 ? 4 : 0}px)">
+      <rect x="786" y="392" width="28" height="30" rx="8" fill="${skin}"/>
+      <ellipse cx="752" cy="362" rx="9" ry="13" fill="${skin}"/><ellipse cx="848" cy="362" rx="9" ry="13" fill="${skin}"/>
+      <ellipse cx="800" cy="352" rx="49" ry="57" fill="${skin}"/>
+      ${lk.beard ? `<path d="M754 364 Q760 414 800 418 Q840 414 846 364 Q840 396 800 402 Q760 396 754 364Z" fill="${hc}" opacity=".85"/>` : ""}
+      <ellipse cx="772" cy="378" rx="9" ry="5" fill="#E58F7A" opacity=".22"/><ellipse cx="828" cy="378" rx="9" ry="5" fill="#E58F7A" opacity=".22"/>
+      ${eye(782)}${eye(818)}
+      <path d="${f.brows[0]}" stroke="${hc}" stroke-width="4" fill="none" stroke-linecap="round"/>
+      <path d="${f.brows[1]}" stroke="${hc}" stroke-width="4" fill="none" stroke-linecap="round"/>
+      <path d="M800 362 Q796 374 801 377" stroke="#000" stroke-opacity=".22" stroke-width="2.5" fill="none" stroke-linecap="round"/>
+      <path class="qr-mouth" d="${f.mouth}" stroke="#7A3E33" stroke-width="3.5" fill="none" stroke-linecap="round"/>
+      <ellipse class="qr-mouth-open" cx="800" cy="393" rx="7" ry="5" fill="#7A3E33" opacity="0"/>
+      ${f.tear ? `<path class="qr-tear" d="M776 368 q-4 8 0 12 q4 -4 0 -12z" fill="#8FC3E0"/>` : ""}
+      ${lk.glasses ? `<g fill="none" stroke="#2A2B27" stroke-width="3"><rect x="766" y="346" width="30" height="24" rx="8"/><rect x="804" y="346" width="30" height="24" rx="8"/><path d="M796 356 h8"/></g>` : ""}
+      ${hairFront(lk, hc)}
+    </g>
+  </g>`;
+}
+
+function lerp(a, b, t) { return a + (b - a) * t; }
+function mix(c1, c2, t) {
+  const p = (c) => [1, 3, 5].map((i) => parseInt(c.slice(i, i + 2), 16));
+  const [a, b] = [p(c1), p(c2)];
+  return "#" + a.map((v, i) => Math.round(lerp(v, b[i], t)).toString(16).padStart(2, "0")).join("");
+}
+
+function createScene(host) {
+  if (!document.getElementById("qr-scene-css")) {
+    const st = document.createElement("style"); st.id = "qr-scene-css"; st.textContent = SCENE_CSS; document.head.appendChild(st);
+  }
+  host.classList.add("qr-host");
+  host.innerHTML = ROOM;
+  const $ = (id) => host.querySelector("#" + id);
+  const patient = $("qrPatient");
+  let look = null, emotion = "neutral", talkTimer = null;
+
+  const draw = () => { if (look) patient.innerHTML = characterSVG(look, emotion); };
+
+  const api = {
+    setPatient(l) { look = l; if (!l) { patient.innerHTML = ""; patient.style.opacity = "0"; } else draw(); },
+    setEmotion(e) { const next = FACE[e] ? e : "neutral"; if (next !== emotion) { emotion = next; draw(); } },
+    getEmotion() { return emotion; },
+    setThinking(on) { $("qrBubble").style.opacity = on ? "1" : "0"; if (on) api.setEmotion("thinking"); },
+    setTalking(on) {
+      clearInterval(talkTimer);
+      const open = () => patient.querySelector(".qr-mouth-open"), line = () => patient.querySelector(".qr-mouth");
+      if (!on) { if (open()) { open().setAttribute("opacity", "0"); line().setAttribute("opacity", "1"); } return; }
+      let o = false;
+      talkTimer = setInterval(() => {
+        o = !o;
+        if (open()) { open().setAttribute("opacity", o ? "1" : "0"); line().setAttribute("opacity", o ? "0" : "1"); }
+      }, 130);
+    },
+    setTime(progress, secondsLeft) {
+      const t = Math.max(0, Math.min(1, progress));
+      $("qrSkyTop").setAttribute("stop-color", mix("#BFD9E8", "#4A4F86", t));
+      $("qrSkyBot").setAttribute("stop-color", mix("#F3E3C3", "#E8996A", t));
+      $("qrDusk").setAttribute("opacity", String(t * 0.35));
+      $("qrSun").setAttribute("cy", String(lerp(230, 430, t)));
+      $("qrSun").setAttribute("fill", mix("#FFF3D1", "#FFB27A", t));
+      $("qrLampGlow").setAttribute("opacity", String(0.3 + t * 0.6));
+      const s = Math.max(0, secondsLeft ?? 0);
+      const minAngle = (s / 600) * 360, secAngle = ((s % 60) / 60) * 360;
+      $("qrClockMin").setAttribute("transform", `rotate(${minAngle})`);
+      $("qrClockSec").setAttribute("transform", `rotate(${secAngle})`);
+      const a = (minAngle - 90) * Math.PI / 180, large = minAngle > 180 ? 1 : 0;
+      $("qrClockArc").setAttribute("d", s > 0 ? `M0 0 L0 -50 A50 50 0 ${large} 1 ${50 * Math.cos(a)} ${50 * Math.sin(a)} Z` : "");
+    },
+    enter() {
+      return new Promise((res) => {
+        patient.style.transform = "translateY(14px)"; patient.style.opacity = "0";
+        requestAnimationFrame(() => requestAnimationFrame(() => { patient.style.transform = "translateY(0)"; patient.style.opacity = "1"; }));
+        setTimeout(res, 950);
+      });
+    },
+    leave() {
+      return new Promise((res) => {
+        patient.style.transform = "translateY(10px)"; patient.style.opacity = "0"; setTimeout(res, 950);
+      });
+    },
+    show() { patient.style.opacity = "1"; patient.style.transform = "none"; },
+  };
+  api.setTime(0, 600);
+  return api;
+}
+
+</script>
+<script>
+(() => {
+"use strict";
+const $ = (s) => document.querySelector(s);
+const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+const CATS = ["Symptoms and Experiences","Emotional State","Personal Background","Relationships and Social Environment","Important Life Events","Underlying Concerns","Patient Needs"];
+const WEIGHTS = {empathy_rapport:.20,question_relevance:.20,active_listening:.15,understanding_symptoms:.20,underlying_concerns:.15,next_steps:.10};
+const CAT_LABEL = {empathy_rapport:"Empathy and Rapport",question_relevance:"Question Relevance",active_listening:"Active Listening",understanding_symptoms:"Understanding Symptoms",underlying_concerns:"Identifying Underlying Concerns",next_steps:"Appropriate Next Steps"};
+const MULT = {Beginner:1,Intermediate:1.25,Advanced:1.5,Expert:1.75,Master:2};
+const SECS = 600;
+const EMO = ["neutral","warm","sad","anxious","guarded","tearful","relieved","frustrated"];
+
+const scene = createScene($("#sceneHost"));
+
+// ---------- progress ----------
+const store = { load(){ try { return JSON.parse(localStorage.getItem("qrc_player")||"null"); } catch { return null; } }, save(p){ try { localStorage.setItem("qrc_player", JSON.stringify(p)); } catch {} } };
+let player = store.load();
+const xpReq = (l) => 50*(l-1)*l;
+const levelFor = (xp) => { let l=1; while (xp >= xpReq(l+1)) l++; return l; };
+const tier = (l) => l<=3?"Beginner":l<=6?"Intermediate":l<=9?"Advanced":l<=15?"Expert":"Master";
+const GUIDE = {
+  Beginner:"One main concern clearly linked to the symptoms. Fairly open patient. 6-7 discovery facts.",
+  Intermediate:"Two interconnected concerns; guarded about the most personal facts. 7-8 discovery facts.",
+  Advanced:"Several interconnected concerns, one the patient doesn't fully recognise. Deflects sometimes. 8-9 facts.",
+  Expert:"Presenting concern partly covers a deeper issue; some details seem to conflict until connected. Low openness. 9-10 facts.",
+  Master:"Nuanced situation, conflicting self-reports, strong defences, subtle links. Low openness. 10-11 facts.",
+};
+
+// ---------- Claude ----------
+let sample = null;
+const sampleReady = (window.claude?.use ? window.claude.use("sample") : Promise.resolve(null)).then((s)=>(sample=s)).catch(()=>null);
+function errCopy(e){
+  const c = e && e.code;
+  if (c==="not_granted"||c==="sampling_disabled") return "The game needs permission to use Claude for the patient. Reload the page to be asked again.";
+  if (c==="rate_limited") return "Claude is busy or you've reached a usage limit. Wait a moment and try again.";
+  if (c==="invalid_json") return "The reply came back garbled. Try again.";
+  return "Couldn't reach Claude just now. Try again.";
+}
+
+// ---------- state ----------
+let G = null, timerId = null;
+const overlayHost = $("#stage");
+function closeOverlays(){ document.querySelectorAll(".overlay.dyn").forEach((o)=>o.remove()); }
+function overlay(html, cls=""){
+  closeOverlays();
+  const o = document.createElement("div"); o.className = "overlay dyn"; o.innerHTML = `<div class="sheet ${cls}">${html}</div>`;
+  overlayHost.appendChild(o); return o;
+}
+function setDim(on){ $("#dim").style.opacity = on ? "1" : "0"; $("#dim").style.pointerEvents = on ? "auto" : "none"; }
+function inSession(on){ $("#hud").hidden = !on; $("#dialog").hidden = !on; $("#notebookBtn").hidden = !on; }
+
+// ---------- title ----------
+function renderTitle(){
+  inSession(false); closeOverlays(); setDim(true); $("#title").hidden = false;
+  scene.setPatient(null); scene.setTime(0, SECS);
+  const has = !!player;
+  $("#newPlayer").hidden = has; $("#backPlayer").hidden = !has;
+  $("#playBtn").textContent = has ? "Call the next patient" : "Open the clinic";
+  if (has){
+    const into = player.xp - xpReq(player.level), need = xpReq(player.level+1) - xpReq(player.level);
+    $("#tName").textContent = `Welcome back, ${player.name}`;
+    $("#tLvl").textContent = player.level; $("#tN").textContent = player.history.length;
+    $("#tBest").textContent = player.history.length ? Math.round(Math.max(...player.history.map((h)=>h.score))) : "–";
+    $("#tTier").textContent = tier(player.level); $("#tXp").textContent = `${into} / ${need} XP`;
+    $("#tXpBar").style.width = `${Math.min(100, into/need*100)}%`;
+  }
+}
+$("#pname").addEventListener("keydown", (e)=>{ if (e.key==="Enter") $("#playBtn").click(); });
+$("#playBtn").addEventListener("click", async () => {
+  $("#titleErr").innerHTML = "";
+  if (!player){
+    const n = $("#pname").value.trim(); if (!n){ $("#pname").focus(); return; }
+    player = {name:n, xp:0, level:1, history:[]}; store.save(player);
+  }
+  const b = $("#playBtn"); b.disabled = true; b.textContent = "Someone is in the waiting room…";
+  try { await sampleReady; G = newGame(await generatePatient()); $("#title").hidden = true; showIntake(); }
+  catch (e) { $("#titleErr").innerHTML = `<div class="err">${esc(errCopy(e))}</div>`; renderTitle(); }
+  finally { b.disabled = false; }
+});
+
+// ---------- generator ----------
+async function generatePatient(){
+  const level = player.level, diff = tier(level);
+  if (!sample) return Object.assign(structuredClone(DEMO), {difficulty:"Beginner", offline:true});
+  const recent = player.history.slice(-6).map((h)=>h.name).join(", ") || "none";
+  const p = await sample.json(`You design fictional patients for "Therapist Simulator", a casual game about listening and understanding people.
+Create ONE fictional adult patient for player level ${level} (difficulty ${diff}). Difficulty guidance: ${GUIDE[diff]}
+Everyday life stressors only (work, family, relationships, transitions, loss, identity, burnout, loneliness). No suicide, self-harm, abuse, sexual content, eating disorders, psychosis, substance dependence, diagnoses or medication. Difficulty comes from complexity and guardedness, not severity. Vary gender, age, region (Indian and international names welcome) and occupation. Avoid these names: ${recent}.
+Return ONLY JSON:
+{"name":"First Last","age":18-75,"occupation":"...","presenting_concern":"1-2 sentence first-person line they say when they sit down","reported_symptoms":["2-4 short phrases"],"personality":"...","communication_style":"...","openness":"low|medium|high","background":"2-4 sentences","session_objective":"one sentence goal for the player","possible_next_steps":["3-5 supportive non-clinical steps"],
+"look":{"gender":"woman|man|nonbinary","skin":1-6 (1 lightest, 6 deepest),"hair":"short|long|bun|curly|buzz|wavy","hair_color":"black|dark|brown|auburn|blonde|gray","outfit":"#hex muted colour","glasses":true|false,"beard":true|false},
+"facts":[{"key":"snake_case","category":"one of ${JSON.stringify(CATS)}","label":"max 6 words","fact":"full hidden fact","importance":1|2|3,"related":["other keys"],"reveal_hint":"what earns this disclosure"}]}
+At least two facts must be importance 3 and connected to others through "related".`, {modelTier:"default", cache:false});
+  if (!p || !Array.isArray(p.facts) || p.facts.length < 4 || !p.name) throw {code:"invalid_json"};
+  const keys = new Set();
+  p.facts = p.facts.filter((f)=>f && f.key && !keys.has(f.key) && keys.add(f.key)).map((f)=>({
+    key:String(f.key), category: CATS.find((c)=>c.toLowerCase()===String(f.category||"").toLowerCase()) || "Personal Background",
+    label:String(f.label||f.key), fact:String(f.fact||""), importance:Math.min(3,Math.max(1,+f.importance||1)),
+    related:(f.related||[]).map(String), reveal_hint:String(f.reveal_hint||"")}));
+  p.facts.forEach((f)=>f.related = f.related.filter((k)=>keys.has(k) && k!==f.key));
+  p.reported_symptoms = (p.reported_symptoms||[]).slice(0,5);
+  p.age = Math.min(80, Math.max(18, +p.age||30));
+  p.difficulty = diff; p.level = level;
+  return p;
+}
+function newGame(patient){
+  const comfort = {high:55, medium:40, low:25}[patient.openness] ?? 40;
+  return {patient, look: normalizeLook(patient.look, patient.name, patient.age), msgs:[], found:new Map(), fresh:new Set(), startedAt:null, ended:false, notes:"", busy:false, unseen:0, comfort};
+}
+
+// ---------- intake ----------
+function showIntake(){
+  const p = G.patient, first = p.name.split(" ")[0];
+  setDim(true);
+  const o = overlay(`
+    <div class="label" style="text-align:center">New patient · intake form</div>
+    <div class="field"><span class="k">Name</span><span class="hand">${esc(p.name)}</span></div>
+    <div class="field"><span class="k">Age</span><span class="hand">${p.age}</span></div>
+    <div class="field"><span class="k">Occupation</span><span class="hand">${esc(p.occupation)}</span></div>
+    <div class="field"><span class="k">Level</span><span class="hand">${p.level} · ${esc(p.difficulty)}</span></div>
+    <div class="field"><span class="k">Reports</span><span class="hand">${p.reported_symptoms.map(esc).join(", ")}</span></div>
+    <div class="field" style="margin-top:4px"><span class="k">Goal</span><span style="line-height:32px;font-size:15px">${esc(p.session_objective)}</span></div>
+    ${p.offline ? `<div class="err" style="background:var(--honey-lt);color:#7A5A12">Claude isn't available in this view, so this is a scripted demo patient.</div>` : ""}
+    <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;margin-top:20px;flex-wrap:wrap">
+      <span style="font-size:13px;color:var(--soft)">10 minutes · starts when they sit down</span>
+      <button class="btn" id="inviteBtn">Invite ${esc(first)} in</button>
+    </div>`, "clipboard");
+  o.querySelector("#inviteBtn").onclick = startSession;
+}
+
+async function startSession(){
+  closeOverlays(); setDim(false);
+  const p = G.patient;
+  scene.setPatient(G.look);
+  scene.setEmotion({low:"guarded", medium:"anxious", high:"neutral"}[p.openness] || "neutral");
+  $("#hudName").textContent = p.name; setComfort(G.comfort); updateNotebook();
+  inSession(true); $("#replyForm").hidden = true;
+  await scene.enter();
+  G.startedAt = Date.now(); startTimer();
+  G.msgs.push({role:"patient", text:p.presenting_concern});
+  speak(p.name.split(" ")[0], p.presenting_concern, scene.getEmotion());
+}
+
+// ---------- dialogue ----------
+let typing = null;
+function speak(who, text, emotion){
+  $("#plate").textContent = who; $("#plate").classList.toggle("you", who==="You");
+  $("#dErr").innerHTML = "";
+  if (emotion) scene.setEmotion(emotion);
+  const el = $("#line"); el.textContent = "";
+  clearInterval(typing?.id);
+  const isPatient = who !== "You";
+  if (isPatient) scene.setTalking(true);
+  let i = 0;
+  const done = () => {
+    clearInterval(typing?.id); typing = null; el.textContent = text; scene.setTalking(false);
+    if (isPatient && !G.ended){ $("#replyForm").hidden = false; $("#hint").textContent = `${G.msgs.length > 1 ? "" : "Tip: open questions and warmth help people open up."}`; $("#say").focus(); }
+  };
+  typing = {id:setInterval(()=>{ i += 2; el.innerHTML = esc(text.slice(0,i)) + `<span class="caret">▍</span>`; el.scrollTop = el.scrollHeight; if (i >= text.length) done(); }, 30), done};
+  $("#hint").textContent = "Tap the text to skip";
+}
+$("#line").addEventListener("click", ()=> typing && typing.done());
+$("#say").addEventListener("keydown", (e)=>{ if (e.key==="Enter" && !e.shiftKey){ e.preventDefault(); $("#replyForm").requestSubmit(); } });
+$("#replyForm").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const text = $("#say").value.trim();
+  if (!text || G.busy || G.ended) return;
+  G.busy = true; $("#say").value = ""; $("#replyForm").hidden = true;
+  G.msgs.push({role:"you", text});
+  $("#plate").textContent = "You"; $("#plate").classList.add("you"); $("#line").textContent = text; $("#hint").textContent = "";
+  scene.setThinking(true);
+  try {
+    const r = await patientTurn(text);
+    scene.setThinking(false);
+    if (G.ended) return;
+    G.msgs.push({role:"patient", text:r.line, emotion:r.emotion});
+    setComfort(G.comfort + Math.max(-15, Math.min(15, r.comfort - G.comfort)));
+    speak(G.patient.name.split(" ")[0], r.line, r.emotion);
+    detect(text, r.line);
+  } catch (err) {
+    scene.setThinking(false); scene.setEmotion("neutral");
+    G.msgs.pop();
+    $("#say").value = text; $("#replyForm").hidden = false;
+    $("#dErr").innerHTML = `<div class="err">${esc(errCopy(err))}</div>`;
+  } finally { G.busy = false; }
+});
+
+function setComfort(v){
+  G.comfort = Math.max(0, Math.min(100, Math.round(v)));
+  const bar = $("#comfortBar"); bar.style.width = `${Math.max(6, G.comfort)}%`; bar.style.backgroundPosition = `${100 - G.comfort}% 0`;
+}
+
+function patientRules(){
+  const p = G.patient;
+  const shared = [...G.found.keys()].map((k)=>p.facts.find((f)=>f.key===k).label).join(", ") || "only the arrival line";
+  return `This is a role-play in a therapy-clinic simulation GAME. You play ${p.name}, a fictional patient sitting in the therapist's armchair. The user is the therapist (the player).
+PRIVATE PROFILE (never recite or list it): ${JSON.stringify({age:p.age, occupation:p.occupation, personality:p.personality, communication_style:p.communication_style, openness:p.openness, background:p.background, facts:p.facts.map(({importance,fact,reveal_hint})=>({importance,fact,reveal_hint}))})}
+Rules: reveal information gradually, at most one new significant thing per reply, only when the therapist's question or warmth earns it (see reveal_hint). Importance-3 facts need real rapport first; before that hesitate, deflect or change the subject naturally. Judgemental, pushy or rushed questions make you shorter and more guarded; warm, curious, reflective ones help you open up. Confirm true guesses only if you'd share them anyway; gently correct false ones. Never contradict the profile; improvise only small mundane details. First person, 1-4 natural spoken sentences, no stage directions, no lists, no advice-giving, never mention AI or games.
+Already shared: ${shared}. Current comfort with the therapist: ${G.comfort}/100.
+Every reply is ONLY this JSON: {"line":"your spoken words","emotion":"one of ${EMO.join("|")}","comfort":0-100 (how safe you now feel with this therapist)}`;
+}
+async function patientTurn(text){
+  if (!sample) return offlineTurn(text);
+  const turns = [{role:"user", content: patientRules()}];
+  for (const m of G.msgs.slice(-16)){
+    if (m.role === "you") turns.push({role:"user", content:`Therapist: ${m.text}`});
+    else turns.push({role:"assistant", content: JSON.stringify({line:m.text, emotion:m.emotion||"neutral", comfort:G.comfort})});
+  }
+  if (turns[turns.length-1].role !== "user") throw {code:"invalid_request"};
+  const r = await sample.json(turns, {modelTier:"quick", cache:false});
+  const line = String(r?.line || "").replace(/\*[^*]{1,60}\*/g,"").trim();
+  if (!line) throw {code:"invalid_json"};
+  return {line, emotion: EMO.includes(r.emotion) ? r.emotion : "neutral", comfort: Math.max(0, Math.min(100, +r.comfort || G.comfort))};
+}
+
+// ---------- discovery ----------
+async function detect(question, reply){
+  const p = G.patient, pending = p.facts.filter((f)=>!G.found.has(f.key));
+  if (!pending.length) return;
+  let hits = [];
+  try {
+    if (!sample) hits = offlineDetect(reply, pending);
+    else {
+      const ctx = G.msgs.slice(-6).map((m)=>`${m.role==="you"?"Therapist":"Patient"}: ${m.text}`).join("\n");
+      const res = await sample.json(`You judge a therapy-simulation game. Which HIDDEN FACTS did the PATIENT genuinely reveal or clearly confirm in their LATEST reply? A therapist's guess does not count unless the patient confirms it. Vague or evasive answers don't count; paraphrases with the same meaning do.
+CANDIDATES: ${JSON.stringify(pending.map(({key,fact})=>({key,fact})))}
+RECENT:\n${ctx}
+LATEST THERAPIST: ${question}\nLATEST PATIENT: ${reply}
+Return ONLY JSON {"discoveries":[{"key":"...","confidence":0.0-1.0}]} (empty list if none).`, {modelTier:"quick", cache:false});
+      hits = (res && res.discoveries) || [];
+    }
+  } catch { return; }
+  const allowed = new Map(pending.map((f)=>[f.key,f])), newly = [];
+  for (const h of hits){
+    const f = allowed.get(String(h.key));
+    if (f && +h.confidence >= 0.6 && !G.found.has(f.key)){ G.found.set(f.key, Date.now()); G.fresh.add(f.key); newly.push(f); }
+  }
+  newly.forEach((f, i) => setTimeout(()=>flyNote(f.label), i*700));
+  if (newly.length) updateNotebook(newly.length);
+}
+function flyNote(text){
+  if ($("#notebookBtn").hidden) return;
+  const n = document.createElement("div"); n.className = "flyer"; n.textContent = "✎ " + text; document.body.appendChild(n);
+  const nb = $("#notebookBtn").getBoundingClientRect(), w = n.offsetWidth;
+  const sx = innerWidth/2 - w/2, sy = innerHeight*0.32;
+  const anim = n.animate([
+    {transform:`translate(${sx}px,${sy+20}px) scale(.9)`, opacity:0},
+    {transform:`translate(${sx}px,${sy}px) scale(1)`, opacity:1, offset:.25},
+    {transform:`translate(${sx}px,${sy}px) scale(1)`, opacity:1, offset:.6},
+    {transform:`translate(${nb.left + nb.width/2 - w/2}px,${nb.top + 20}px) scale(.3) rotate(-12deg)`, opacity:.2},
+  ], {duration:2000, easing:"ease-in-out"});
+  anim.onfinish = () => { n.remove(); const b = $("#notebookBtn"); b.classList.remove("bump"); void b.offsetWidth; b.classList.add("bump"); };
+}
+function updateNotebook(added=0){
+  $("#nbCount").textContent = `${G.found.size} / ${G.patient.facts.length}`;
+  if (added){ G.unseen += added; $("#nbBadge").textContent = `+${G.unseen}`; $("#nbBadge").hidden = false; }
+}
+
+function stateOf(f){ if (f.related.some((k)=>G.found.has(k))) return "connected"; return f.importance >= 3 ? "important" : "discovered"; }
+function notebookHTML(){
+  const p = G.patient, facts = p.facts;
+  const lab = (k) => (facts.find((f)=>f.key===k)||{}).label || "";
+  let cols = "";
+  for (const c of CATS){
+    const inCat = facts.filter((f)=>f.category===c); if (!inCat.length) continue;
+    const got = inCat.filter((f)=>G.found.has(f.key));
+    cols += `<div class="cat"><h3><span>${esc(c)}</span><span>${got.length}/${inCat.length}</span></h3>`;
+    for (const f of got){
+      const st = stateOf(f), links = f.related.filter((k)=>G.found.has(k));
+      cols += `<div class="ins ${st} ${G.fresh.has(f.key)?"fresh":""}">${esc(f.label)}<small>${st}</small><span style="display:block;font-size:19px;line-height:24px;color:#4A5B7F">${esc(f.fact)}</span>${links.length?`<span class="lk">↔ ${links.map((k)=>esc(lab(k))).join(", ")}</span>`:""}</div>`;
+    }
+    for (let i=got.length;i<inCat.length;i++) cols += `<div class="unknown">· · · still unknown</div>`;
+    cols += `</div>`;
+  }
+  return `<div style="display:flex;justify-content:space-between;align-items:baseline;gap:10px;flex-wrap:wrap">
+      <h2 style="font-size:24px">${esc(p.name)} · case notes</h2><span style="color:var(--soft);font-variant-numeric:tabular-nums">${G.found.size} of ${facts.length} discovered</span></div>
+    <div class="hand" style="margin:6px 0 4px">${p.age}, ${esc(p.occupation)} — reports ${p.reported_symptoms.map(esc).join(", ").toLowerCase()}</div>
+    <div class="bookgrid" style="margin-top:8px">${cols}</div>
+    <h3 style="font-family:var(--body);font-size:12px;font-weight:600;text-transform:uppercase;letter-spacing:.08em;color:var(--soft);line-height:32px;margin-top:6px"><label for="notesTa">My notes</label></h3>
+    <textarea class="notes" id="notesTa" placeholder="Hunches, connections, things to ask…">${esc(G.notes)}</textarea>
+    <div style="text-align:right;margin-top:10px"><button class="btn" id="closeBook">Back to the conversation</button></div>`;
+}
+$("#notebookBtn").addEventListener("click", () => {
+  G.unseen = 0; $("#nbBadge").hidden = true;
+  const o = overlay(notebookHTML(), "book");
+  G.fresh.clear();
+  o.querySelector("#notesTa").addEventListener("input", (e)=>{ G.notes = e.target.value; });
+  o.querySelector("#closeBook").onclick = closeOverlays;
+  o.addEventListener("click", (e)=>{ if (e.target === o) closeOverlays(); });
+});
+$("#logBtn").addEventListener("click", () => {
+  const first = G.patient.name.split(" ")[0];
+  const o = overlay(`<h2 style="font-size:22px;margin-bottom:8px">Session log</h2>${G.msgs.map((m)=>`<div class="entry"><b style="color:${m.role==="you"?"var(--sage)":"var(--clay)"}">${m.role==="you"?"You":esc(first)}</b><div>${esc(m.text)}</div></div>`).join("")}<div style="text-align:right;margin-top:14px"><button class="btn" id="closeLog">Close</button></div>`, "log");
+  o.querySelector("#closeLog").onclick = closeOverlays;
+  o.addEventListener("click", (e)=>{ if (e.target === o) closeOverlays(); });
+});
+
+// ---------- timer + ending ----------
+const left = () => Math.max(0, SECS - Math.floor((Date.now()-G.startedAt)/1000));
+function startTimer(){
+  clearInterval(timerId);
+  const tick = () => {
+    const s = left();
+    $("#timer").textContent = `${String(Math.floor(s/60)).padStart(2,"0")}:${String(s%60).padStart(2,"0")}`;
+    $("#timer").classList.toggle("low", s <= 60);
+    scene.setTime((SECS - s)/SECS, s);
+    if (s === 0 && !G.ended) finishSession("time");
+  };
+  tick(); timerId = setInterval(tick, 500);
+}
+$("#endBtn").addEventListener("click", () => {
+  if (G.ended) return;
+  const o = overlay(`<h2 style="font-size:22px">End the session?</h2><p style="color:var(--soft)">${esc(G.patient.name.split(" ")[0])} will leave and you'll write up your notes.</p>
+    <div style="display:flex;gap:8px;justify-content:flex-end"><button class="btn quiet" id="keep">Keep talking</button><button class="btn clay" id="endNow">End session</button></div>`, "log");
+  o.querySelector("#keep").onclick = closeOverlays;
+  o.querySelector("#endNow").onclick = () => { closeOverlays(); finishSession("manual"); };
+});
+async function finishSession(reason){
+  if (G.ended) return;
+  G.ended = true; clearInterval(timerId); closeOverlays();
+  $("#replyForm").hidden = true; scene.setThinking(false);
+  const bye = reason === "time" ? "Oh — is that the time already? Thank you for listening today." : "Okay. Thank you for today. It helped to talk.";
+  speak(G.patient.name.split(" ")[0], bye, G.comfort >= 50 ? "relieved" : "neutral");
+  await new Promise((r)=>setTimeout(r, 2600));
+  if (typing) typing.done();
+  await scene.leave();
+  inSession(false); showAssessment();
+}
+
+// ---------- assessment ----------
+function showAssessment(){
+  setDim(true);
+  const first = G.patient.name.split(" ")[0];
+  const o = overlay(`
+    <div class="label">Session notes</div>
+    <h2 style="font-size:24px;line-height:32px;margin-bottom:4px">What did you understand about ${esc(first)}?</h2>
+    <form id="asForm">
+      <label><span>Main concern *</span><textarea id="a1" maxlength="1500" placeholder="What is really going on?"></textarea></label>
+      <label><span>Symptoms &amp; experiences</span><textarea id="a2" maxlength="1500"></textarea></label>
+      <label><span>Underlying concerns &amp; how they connect</span><textarea id="a3" maxlength="1500"></textarea></label>
+      <label><span>Key discoveries &amp; open questions</span><textarea id="a4" maxlength="1500"></textarea></label>
+      <label><span>Suggested next steps *</span><textarea id="a5" maxlength="1500"></textarea></label>
+      <div id="asErr"></div>
+      <div style="display:flex;justify-content:space-between;gap:8px;align-items:center;flex-wrap:wrap;margin-top:10px">
+        <button type="button" class="linkbtn" id="peek">Peek at case notes</button>
+        <button class="btn" id="asBtn">Hand in to supervisor</button>
+      </div>
+    </form>`, "form");
+  o.querySelector("#a1").focus();
+  o.querySelector("#peek").onclick = () => {
+    const keep = ["a1","a2","a3","a4","a5"].map((id)=>o.querySelector("#"+id).value);
+    const b = overlay(notebookHTML().replace("Back to the conversation","Back to my session notes"), "book");
+    b.querySelector("#notesTa").addEventListener("input", (e)=>{ G.notes = e.target.value; });
+    b.querySelector("#closeBook").onclick = () => { showAssessment(); const n = document.querySelector(".overlay.dyn"); ["a1","a2","a3","a4","a5"].forEach((id,i)=>n.querySelector("#"+id).value = keep[i]); };
+  };
+  o.querySelector("#asForm").onsubmit = async (e) => {
+    e.preventDefault();
+    const v = (id) => o.querySelector("#"+id).value.trim();
+    const a = {main_concern:v("a1"), important_symptoms:v("a2"), underlying_concerns:v("a3"), important_discoveries:v("a4"), next_steps:v("a5")};
+    if (a.main_concern.length < 3 || a.next_steps.length < 3){ o.querySelector("#asErr").innerHTML = `<div class="err">Write at least the main concern and your next steps.</div>`; return; }
+    const btn = o.querySelector("#asBtn"); btn.disabled = true; btn.textContent = "Your supervisor is reading…";
+    try { showReport(await evaluate(a)); }
+    catch (err) { o.querySelector("#asErr").innerHTML = `<div class="err">${esc(errCopy(err))}</div>`; btn.disabled = false; btn.textContent = "Hand in to supervisor"; }
+  };
+}
+
+const clamp = (x) => Math.max(0, Math.min(100, +x || 0));
+async function evaluate(a){
+  const p = G.patient, found = new Set(G.found.keys());
+  let ev;
+  if (!sample) ev = offlineEval(a);
+  else {
+    const convo = G.msgs.map((m)=>`${m.role==="you"?"Therapist":p.name}: ${m.text}`).join("\n");
+    ev = await sample.json(`You are a fair, calibrated supervisor grading a player in a therapy-simulation GAME. Grade only what is in the transcript and final assessment. A short or superficial session must not score highly.
+HIDDEN PROFILE: ${JSON.stringify(p)}
+FACTS DISCOVERED: ${JSON.stringify(p.facts.filter((f)=>found.has(f.key)).map((f)=>f.label))}
+FACTS MISSED: ${JSON.stringify(p.facts.filter((f)=>!found.has(f.key)).map((f)=>f.label))}
+TRANSCRIPT:\n${convo}
+FINAL ASSESSMENT: ${JSON.stringify(a)}
+Score 0-100 each. Do not compute any total. Return ONLY JSON:
+{"category_scores":{"empathy_rapport":0,"question_relevance":0,"active_listening":0,"understanding_symptoms":0,"underlying_concerns":0,"next_steps":0},
+"satisfaction":{"feeling_heard":0,"empathy":0,"respect":0,"comfort":0,"trust":0,"feeling_understood":0},
+"understanding":{"assessment_accuracy":0,"connections_identified":0,"uncertainty_recognition":0,"prioritization":0},
+"strengths":["2-4 specific"],"improvements":["2-4 specific, refer to moments"],"summary":"1-2 sentences, written to the player"}`, {modelTier:"default", cache:false});
+  }
+  const cats = {}; for (const k in WEIGHTS) cats[k] = clamp(ev.category_scores?.[k]);
+  const nYou = G.msgs.filter((m)=>m.role==="you").length;
+  if (nYou < 3) for (const k of ["empathy_rapport","question_relevance","active_listening"]) cats[k] = Math.min(cats[k], 25 + 15*nYou);
+  const overall = +Object.entries(WEIGHTS).reduce((s,[k,w])=>s + w*cats[k], 0).toFixed(1);
+  const sat = Object.values(ev.satisfaction||{}).map(clamp);
+  const satisfaction = sat.length ? +(sat.reduce((x,y)=>x+y,0)/sat.length).toFixed(1) : 0;
+  const tot = p.facts.reduce((s,f)=>s+f.importance,0), got = p.facts.filter((f)=>found.has(f.key)).reduce((s,f)=>s+f.importance,0);
+  const coverage = tot ? got/tot : 0, u = ev.understanding || {};
+  const und = {facts_discovered:+(coverage*100).toFixed(1), assessment_accuracy:clamp(u.assessment_accuracy), connections_identified:clamp(u.connections_identified), uncertainty_recognition:clamp(u.uncertainty_recognition), prioritization:clamp(u.prioritization)};
+  const understanding = +(.35*und.facts_discovered + .30*und.assessment_accuracy + .15*und.connections_identified + .10*und.uncertainty_recognition + .10*und.prioritization).toFixed(1);
+  const xp = Math.max(5, Math.round((.5*overall + .25*understanding + .25*satisfaction + (coverage>=.999?10:0)) * (MULT[p.difficulty]||1)));
+  const oldLevel = player.level;
+  player.xp += xp; player.level = levelFor(player.xp);
+  player.history.push({name:p.name, job:p.occupation, score:overall, xp, at:Date.now()});
+  store.save(player);
+  return {overall, satisfaction, understanding, cats, satParts:ev.satisfaction||{}, und, xp, leveled:player.level>oldLevel,
+    strengths:(ev.strengths||[]).slice(0,4), improvements:(ev.improvements||[]).slice(0,4), summary:ev.summary||"", found:found.size, total:p.facts.length};
+}
+
+function ring(v, color){
+  const r = 52, c = 2*Math.PI*r;
+  return `<div class="ring"><svg viewBox="0 0 120 120"><circle cx="60" cy="60" r="${r}" fill="none" stroke="#EADFCB" stroke-width="10"/><circle cx="60" cy="60" r="${r}" fill="none" stroke="${color}" stroke-width="10" stroke-linecap="round" stroke-dasharray="${c}" stroke-dashoffset="${c*(1-clamp(v)/100)}"/></svg><span>${Math.round(v)}</span></div>`;
+}
+const rating = (s) => s>=90?"Outstanding":s>=75?"Good work":s>=60?"Solid start":s>=40?"Room to grow":"Tough session";
+const nice = (k) => k.replace(/_/g," ").replace(/^\w/,(c)=>c.toUpperCase());
+
+function showReport(r){
+  const p = G.patient, into = player.xp - xpReq(player.level), need = xpReq(player.level+1)-xpReq(player.level);
+  const o = overlay(`
+    <div class="stamp">${rating(r.overall)}</div>
+    <div class="label">Supervisor's report</div>
+    <h2 style="font-size:26px;margin-top:4px">Session with ${esc(p.name)}</h2>
+    <div class="rings">
+      <div>${ring(r.overall,"#4C7353")}<div style="font-size:13px;font-weight:600;margin-top:6px">Performance</div></div>
+      <div>${ring(r.satisfaction,"#B65E4A")}<div style="font-size:13px;font-weight:600;margin-top:6px">Patient satisfaction</div></div>
+      <div>${ring(r.understanding,"#525D90")}<div style="font-size:13px;font-weight:600;margin-top:6px">Understanding</div></div>
+    </div>
+    ${r.summary ? `<p class="hand" style="margin:0 0 14px">${esc(r.summary)}</p>` : ""}
+    <div class="cols">
+      <div>${Object.keys(WEIGHTS).map((k)=>`<div class="kv"><span>${CAT_LABEL[k]} <span style="color:var(--faint);font-size:12px">${WEIGHTS[k]*100}%</span></span><b>${Math.round(r.cats[k])}</b></div><div class="bar"><i style="width:${r.cats[k]}%"></i></div>`).join("")}</div>
+      <div>
+        <div class="label" style="margin-bottom:6px">What went well</div>${r.strengths.map((s)=>`<div style="font-size:14px;margin-bottom:6px">✓ ${esc(s)}</div>`).join("")}
+        <div class="label" style="margin:12px 0 6px">To work on</div>${r.improvements.map((s)=>`<div style="font-size:14px;margin-bottom:6px">→ ${esc(s)}</div>`).join("")}
+        <div class="label" style="margin:12px 0 6px">${r.found} of ${r.total} facts discovered</div>
+        ${Object.entries(r.satParts).map(([k,v])=>`<div class="kv"><span style="color:var(--soft)">Patient felt: ${esc(nice(k).toLowerCase())}</span><span>${Math.round(clamp(v))}</span></div>`).join("")}
+      </div>
+    </div>
+    <div style="display:flex;align-items:center;gap:16px;flex-wrap:wrap;margin-top:18px;padding-top:16px;border-top:1px solid var(--paper-line)">
+      <div><div style="font-family:var(--display);font-size:26px;font-weight:600;color:var(--honey)">+${r.xp} XP</div>${r.leveled?`<div style="color:var(--sage);font-weight:600;font-size:14px">Level up! Now level ${player.level}.</div>`:""}</div>
+      <div style="flex:1;min-width:160px"><div class="kv" style="font-size:12px"><span>Level ${player.level} · ${tier(player.level)}</span><span style="color:var(--faint)">${into} / ${need} XP</span></div><div class="xpbar" style="margin-top:4px"><i style="width:${into/need*100}%"></i></div></div>
+      <button class="btn quiet" id="toTitle">Clinic</button><button class="btn" id="nextPt">Next patient</button>
+    </div>`, "report");
+  o.querySelector("#toTitle").onclick = renderTitle;
+  o.querySelector("#nextPt").onclick = () => { renderTitle(); $("#playBtn").click(); };
+}
+
+// ---------- offline fallback (only when Claude isn't available in this view) ----------
+const DEMO = {name:"Rahul Mehta", age:24, occupation:"Software Developer", level:1, openness:"medium",
+  look:{gender:"man", hair:"short", skin:3, hair_color:"black", outfit:"#4F6D8F", glasses:true, beard:false},
+  presenting_concern:"I've been having trouble concentrating at work lately. I feel exhausted even after sleeping, and everything seems overwhelming.",
+  reported_symptoms:["Difficulty concentrating","Persistent tiredness","Feeling overwhelmed"],
+  personality:"Polite, analytical", communication_style:"Short answers at first", background:"Moved from Pune to Bengaluru for his first job.",
+  session_objective:"Understand what is driving Rahul's exhaustion and overwhelm, and agree on supportive next steps.",
+  possible_next_steps:["Explore workload boundaries","Build social connection","Self-compassion work","Follow-up sessions"],
+  facts:[
+    {key:"work",category:"Symptoms and Experiences",label:"Heavy workplace pressure",importance:2,related:["promo"],fact:"Deadlines doubled after a reorg; he works till midnight.",line:"Since the reorg my deadlines basically doubled. I'm online till midnight most days.",emo:"anxious",kw:["work","job","deadline","change","recent","busy"]},
+    {key:"compare",category:"Emotional State",label:"Comparing himself to colleagues",importance:2,related:["doubt"],fact:"Constantly compares himself to faster colleagues.",line:"Everyone on my team seems so much quicker than me. I keep comparing myself.",emo:"sad",kw:["colleague","team","others","compare","yourself"]},
+    {key:"doubt",category:"Underlying Concerns",label:"Deep self-doubt",importance:3,related:["compare","family"],fact:"Believes he isn't good enough and was hired by mistake.",line:"Honestly... sometimes I think they hired me by mistake.",emo:"tearful",kw:["feel","yourself","worth","good","enough","believe"]},
+    {key:"family",category:"Relationships and Social Environment",label:"Fear of disappointing family",importance:3,related:["doubt"],fact:"Parents sacrificed for his degree; he hides his stress from them.",line:"My parents sacrificed a lot for my degree. I can't let them down.",emo:"sad",kw:["family","parent","home","mother","father","expect"]},
+    {key:"isolated",category:"Relationships and Social Environment",label:"Socially isolated",importance:2,related:[],fact:"Has almost no friends in the new city.",line:"I don't really know anyone here. Weekends I mostly stay in.",emo:"sad",kw:["friend","weekend","support","alone","social","people"]},
+    {key:"promo",category:"Important Life Events",label:"Missed a promotion",importance:2,related:["work"],fact:"Passed over for promotion three months ago; told no one.",line:"Three months ago I didn't get the promotion. I haven't told anyone that.",emo:"guarded",kw:["promotion","happened","event","told","secret"]},
+  ]};
+const EMP = ["sounds","understand","must be","hard","difficult","hear","makes sense","take your time","okay","appreciate","thank"];
+async function offlineTurn(t){
+  await new Promise((r)=>setTimeout(r, 900));
+  const low = t.toLowerCase(), warm = EMP.some((e)=>low.includes(e));
+  const warmth = G.msgs.filter((m)=>m.role==="you" && EMP.some((e)=>m.text.toLowerCase().includes(e))).length;
+  const comfort = Math.min(100, G.comfort + (warm ? 12 : -2));
+  const cand = G.patient.facts.filter((f)=>!G.found.has(f.key)).map((f)=>[f, f.kw.filter((k)=>low.includes(k)).length]).sort((a,b)=>b[1]-a[1]);
+  if (!cand.length) return {line:"I think I've told you most of it now. It helps to say it out loud.", emotion:"relieved", comfort};
+  const [f, score] = cand[0];
+  if (!score) return {line:"I'm not sure what you mean. I just feel tired all the time.", emotion:"neutral", comfort};
+  if (f.importance===3 && warmth < 1) return {line:"I'd rather not get into that right now.", emotion:"guarded", comfort};
+  return {line:(warm ? "Thanks for saying that. " : "") + f.line, emotion:f.emo, comfort};
+}
+function offlineDetect(reply, pending){ return pending.filter((f)=>f.line && reply.includes(f.line.slice(0,30))).map((f)=>({key:f.key, confidence:.95})); }
+function offlineEval(a){
+  const you = G.msgs.filter((m)=>m.role==="you"), n = Math.max(1, you.length);
+  const emp = you.filter((m)=>EMP.some((e)=>m.text.toLowerCase().includes(e))).length/n, cov = G.found.size/G.patient.facts.length;
+  const s = (x, b=35) => Math.round(b + x*(100-b)), words = (a.main_concern+" "+a.underlying_concerns+" "+a.next_steps).toLowerCase();
+  const acc = Math.min(1, ["doubt","family","pressure","work","isolat","compar","promotion"].filter((w)=>words.includes(w)).length/5);
+  return {category_scores:{empathy_rapport:s(emp),question_relevance:s(cov),active_listening:s((emp+cov)/2),understanding_symptoms:s((cov+acc)/2),underlying_concerns:s(acc),next_steps:s(Math.min(1,a.next_steps.length/120))},
+    satisfaction:{feeling_heard:s(emp,45),empathy:s(emp,40),respect:80,comfort:s(emp,45),trust:s(cov,40),feeling_understood:s(acc,40)},
+    understanding:{assessment_accuracy:s(acc,20),connections_identified:s(acc*cov,20),uncertainty_recognition:60,prioritization:s(acc,30)},
+    strengths:[emp>.3?"You validated feelings often.":"You stayed on task."], improvements:[cov<.6?"Several parts of the story were never uncovered.":"Try linking concerns together explicitly."], summary:"Offline demo scoring."};
+}
+
+renderTitle();
+})();
+</script>
